@@ -18,31 +18,31 @@ import (
 var (
 	inWidth  float64 = 5064
 	inHeight float64 = 2532
+	tileSize int     = 1024
 	wg       sync.WaitGroup
 )
 
 func main() {
 	inputFilename := "//home/adolfo/Descargas/prueba_cubo/imagen2.jpg"
-	/*inputLayout := "equirect"
-	sampleWidth := 5064
-	sampleHeight := 2532
-	sampleTime := 0
 
-	outputFilename := "/home/adolfo/Documentos/panopo/panopo/img/img3_ok.jpg"*/
+	GetCubicImage("/temp/", "imagenprueba", inputFilename, 2048)
+}
 
-	outputWidth := 4096
-	outputHeight := 6144
+//GetCubicImage transform equirectangular image to cubic and return the 6 image paths
+func GetCubicImage(dir, name, imageData string, tilesize int) {
+	tileSize = tilesize
+	//outputWidth := 4096
+	//outputHeight := 6144
 
 	cubemap, err := lib.NewCubemap()
 	if err != nil {
 		fmt.Printf("cubemap: ", err.Error())
-
 	}
 
-	w, h := cubemap.Resize(outputWidth, outputHeight)
+	w, h := cubemap.Resize(tileSize, tileSize)
 	cubemap.TileSize.X = w
 	cubemap.TileSize.Y = h
-	reader, err := os.Open(inputFilename)
+	reader, err := os.Open(imageData)
 	//var im image
 	if err != nil {
 		log.Fatal(err)
@@ -55,65 +55,11 @@ func main() {
 	}
 
 	equirectToCubemap(im, *cubemap)
-	//fmt.Printf("%+v", im.ColorModel)
-
-	//bounds := im.Bounds()
-
-	// Calculate a 16-bin histogram for m's red, green, blue and alpha components.
-	//
-	// An image's bounds do not necessarily start at (0, 0), so the two loops start
-	// at bounds.Min.Y and bounds.Min.X. Looping over Y first and X second is more
-	// likely to result in better memory access patterns than X first and Y second.
-	/*cubeImage := image.NewNRGBA(image.Rect(0, 0, 5064, 2532))
-
-	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
-		for x := bounds.Min.X; x < bounds.Max.X; x++ {
-			r, g, b, a := im.At(x, y).RGBA()
-
-			col := color.RGBA64{R: uint16(r), G: uint16(g), B: uint16(b), A: uint16(a)}
-
-			cubeImage.Set(x, y, col)
-
-		}
-	}
-	f, err := os.OpenFile("ssrgb.jpg", os.O_WRONLY|os.O_CREATE, 0600)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	defer f.Close()
-
-	var opt jpeg.Options
-	opt.Quality = 80
-	jpeg.Encode(f, cubeImage, &opt)
-	//png.Encode(f, cubeImage)*/
-
-	//fmt.Fprintln("image: %v", im.Bounds())
-	//	$start = microtime(true);
-}
-
-//GetCubicImage transform equirectangular image to cubic and return the 6 image paths
-func GetCubicImage() {
-
+	//equirectToCubemap
 }
 
 //EquirectToCubemap convert an image equirectangular to cubic
 func equirectToCubemap(equiImage image.Image, cubemap lib.Cubemap) {
-
-	/*outWidth := cubemap.GetImageWidth()
-	outHeight := cubemap.GetImageHeight()
-
-	cubeImage := image.NewNRGBA(image.Rect(0, 0, outWidth, outHeight))*/
-
-	//fmt.Fprintln(outHeight, outWidth)
-	//fmt.Printf("sssd %v", cubeImage)
-
-	//	re-using class objects saves cpu time in massive loops
-	//var viewVector lib.Vector3 // := lib.VectorArray3{0, 0, lib.Vector2{0, 0}}
-	//var latLong lib.LatLong    // := lib.Vector2{0, 0}
-	//var sphereImagePos lib.Vector2  //:= lib.Vector2{0, 0}
-
-	//	go through each tile, convert pixel to lat long, then read
 
 	for face, faceOffset := range cubemap.FaceMap {
 		wg.Add(1)
@@ -122,33 +68,17 @@ func equirectToCubemap(equiImage image.Image, cubemap lib.Cubemap) {
 	}
 	wg.Wait()
 
-	/*
-		time := time.Now()
-		filename := "../img/" + time.String() + ".jpg"
-		f, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE, 0600)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-		defer f.Close()
-		var opt jpeg.Options
-		opt.Quality = 80
-		jpeg.Encode(f, cubeImage, &opt)
-
-		//png.Encode(f, cubeImage)
-		//equiImage = cubeImage*/
 }
 
 //process a face an generate an image
 func processFace(equiImage image.Image, face string, faceOffset lib.VectorArray3, name string, cubemap lib.Cubemap) {
 	var colour = cubemap.GetFaceColor(face)
 
-	var viewVector lib.Vector3 // := lib.VectorArray3{0, 0, lib.Vector2{0, 0}}
-	var latLong lib.LatLong    // := lib.Vector2{0, 0}
-	cubeImage := image.NewNRGBA(image.Rect(0, 0, 2048, 2048))
-	//fmt.Println("faceoffset:", faceOffset.X, faceOffset.Y, face)
-	for fy := 0; fy < 2048; fy++ {
-		for fx := 0; fx < 2048; fx++ {
+	var viewVector lib.Vector3
+	var latLong lib.LatLong
+	cubeImage := image.NewNRGBA(image.Rect(0, 0, tileSize, tileSize))
+	for fy := 0; fy < tileSize; fy++ {
+		for fx := 0; fx < tileSize; fx++ {
 
 			var screenPos lib.LatLong
 
