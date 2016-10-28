@@ -272,8 +272,8 @@ func (c Cubemap) ScreenToWorld(face string, screenPosX float64, screenPosY float
 	return vector
 }
 
-func (c Cubemap) GetFaceColor(face string) color.RGBA {
-	p := color.RGBA{
+func (c Cubemap) GetFaceColor(face string) color.RGBA64 {
+	p := color.RGBA64{
 		255, 255, 255, 255,
 	}
 	switch face {
