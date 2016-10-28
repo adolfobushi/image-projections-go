@@ -6,6 +6,7 @@ import (
 	"log"
 	"math"
 	"os"
+	"sync"
 	"time"
 
 	"image/color"
@@ -14,8 +15,14 @@ import (
 	"github.com/adolfobushi/equirectangular-to-cubic/lib"
 )
 
+var (
+	inWidth  float64 = 5064
+	inHeight float64 = 2532
+	wg       sync.WaitGroup
+)
+
 func main() {
-	inputFilename := "//home/adolfo/Descargas/prueba_cubo/site_uploadfilezilla.jpg"
+	inputFilename := "//home/adolfo/Descargas/prueba_cubo/imagen2.jpg"
 	/*inputLayout := "equirect"
 	sampleWidth := 5064
 	sampleHeight := 2532
@@ -93,51 +100,77 @@ func GetCubicImage() {
 //EquirectToCubemap convert an image equirectangular to cubic
 func equirectToCubemap(equiImage image.Image, cubemap lib.Cubemap) {
 
-	var inWidth float64 = 5064
-	var inHeight float64 = 2532
-
-	outWidth := cubemap.GetImageWidth()
+	/*outWidth := cubemap.GetImageWidth()
 	outHeight := cubemap.GetImageHeight()
 
-	cubeImage := image.NewNRGBA(image.Rect(0, 0, outWidth, outHeight))
+	cubeImage := image.NewNRGBA(image.Rect(0, 0, outWidth, outHeight))*/
+
+	//fmt.Fprintln(outHeight, outWidth)
+	//fmt.Printf("sssd %v", cubeImage)
 
 	//	re-using class objects saves cpu time in massive loops
-	var viewVector lib.Vector3 // := lib.VectorArray3{0, 0, lib.Vector2{0, 0}}
-	var latLong lib.LatLong    // := lib.Vector2{0, 0}
+	//var viewVector lib.Vector3 // := lib.VectorArray3{0, 0, lib.Vector2{0, 0}}
+	//var latLong lib.LatLong    // := lib.Vector2{0, 0}
 	//var sphereImagePos lib.Vector2  //:= lib.Vector2{0, 0}
 
 	//	go through each tile, convert pixel to lat long, then read
+
 	for face, faceOffset := range cubemap.FaceMap {
+		wg.Add(1)
+		go processFace(equiImage, face, faceOffset, "imagen1", cubemap)
 
-		var colour = cubemap.GetFaceColor(face)
-		var x int
-		var y int
-		for fy := 0; fy < cubemap.TileSize.Y; fy++ {
-			for fx := 0; fx < cubemap.TileSize.X; fx++ {
-				var screenPos lib.LatLong
-				x = fx + (faceOffset.X * cubemap.TileSize.X)
-				y = fy + (faceOffset.Y * cubemap.TileSize.Y)
+	}
+	wg.Wait()
 
-				vx := float64(fx) / float64(cubemap.TileSize.X)
-				vy := float64(fy) / float64(cubemap.TileSize.Y)
-				viewVector = cubemap.ScreenToWorld(face, vx, vy)
+	/*
+		time := time.Now()
+		filename := "../img/" + time.String() + ".jpg"
+		f, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE, 0600)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		defer f.Close()
+		var opt jpeg.Options
+		opt.Quality = 80
+		jpeg.Encode(f, cubeImage, &opt)
 
-				if viewVector.X != 0 {
+		//png.Encode(f, cubeImage)
+		//equiImage = cubeImage*/
+}
 
-					latLong = lib.ViewToLatLon(viewVector) //	 0.9s
+//process a face an generate an image
+func processFace(equiImage image.Image, face string, faceOffset lib.VectorArray3, name string, cubemap lib.Cubemap) {
+	var colour = cubemap.GetFaceColor(face)
 
-					screenPos = lib.GetScreenFromLatLong(latLong.X, latLong.Y, inWidth, inHeight)
+	var viewVector lib.Vector3 // := lib.VectorArray3{0, 0, lib.Vector2{0, 0}}
+	var latLong lib.LatLong    // := lib.Vector2{0, 0}
+	cubeImage := image.NewNRGBA(image.Rect(0, 0, 2048, 2048))
+	//fmt.Println("faceoffset:", faceOffset.X, faceOffset.Y, face)
+	for fy := 0; fy < 2048; fy++ {
+		for fx := 0; fx < 2048; fx++ {
 
-					colour = ReadPixelClamped(equiImage, screenPos.X, screenPos.Y, inWidth, inHeight)
-				}
+			var screenPos lib.LatLong
 
-				cubeImage.Set(x, y, colour)
+			vx := float64(fx) / float64(cubemap.TileSize.X)
+			vy := float64(fy) / float64(cubemap.TileSize.Y)
+			viewVector = cubemap.ScreenToWorld(face, vx, vy)
+
+			if viewVector.X != 0 {
+
+				latLong = lib.ViewToLatLon(viewVector) //	 0.9s
+
+				screenPos = lib.GetScreenFromLatLong(latLong.X, latLong.Y, inWidth, inHeight)
+
+				colour = ReadPixelClamped(equiImage, screenPos.X, screenPos.Y, inWidth, inHeight)
 			}
+
+			cubeImage.Set(fx, fy, colour)
 		}
 	}
 
 	time := time.Now()
-	filename := "../img/" + time.String() + ".jpg"
+	filename := "../img/" + name + "_face" + time.String() + ".jpg"
 	f, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE, 0600)
 	if err != nil {
 		fmt.Println(err)
@@ -147,8 +180,9 @@ func equirectToCubemap(equiImage image.Image, cubemap lib.Cubemap) {
 	var opt jpeg.Options
 	opt.Quality = 80
 	jpeg.Encode(f, cubeImage, &opt)
-	//png.Encode(f, cubeImage)
-	//equiImage = cubeImage
+
+	defer wg.Done()
+
 }
 
 //ReadPixelClamped get the pixel color of equirectangular image to put in cube face
