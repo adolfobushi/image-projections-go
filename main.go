@@ -16,14 +16,16 @@ import (
 )
 
 var (
-	inWidth  float64 = 5064
-	inHeight float64 = 2532
-	tileSize int     = 1024
-	wg       sync.WaitGroup
+	inWidth      float64 = 5064
+	inHeight     float64 = 2532
+	tileSize             = 1024
+	outputWidth          = 4096
+	outputHeight         = 6144
+	wg           sync.WaitGroup
 )
 
 func main() {
-	inputFilename := "//home/adolfo/Descargas/prueba_cubo/imagen2.jpg"
+	inputFilename := "//home/adolfo/Descargas/prueba_cubo/imagen4.jpg"
 
 	GetCubicImage("/temp/", "imagenprueba", inputFilename, 2048)
 }
@@ -31,8 +33,6 @@ func main() {
 //GetCubicImage transform equirectangular image to cubic and return the 6 image paths
 func GetCubicImage(dir, name, imageData string, tilesize int) {
 	tileSize = tilesize
-	//outputWidth := 4096
-	//outputHeight := 6144
 
 	cubemap, err := lib.NewCubemap()
 	if err != nil {
@@ -61,26 +61,42 @@ func GetCubicImage(dir, name, imageData string, tilesize int) {
 //EquirectToCubemap convert an image equirectangular to cubic
 func equirectToCubemap(equiImage image.Image, cubemap lib.Cubemap) {
 
+	cubeImage := image.NewNRGBA(image.Rect(0, 0, outputWidth, outputHeight))
+
 	for face, faceOffset := range cubemap.FaceMap {
 		wg.Add(1)
-		go processFace(equiImage, face, faceOffset, "imagen1", cubemap)
+		go processFace(equiImage, *cubeImage, face, faceOffset, "imagen1", cubemap)
 
 	}
+
 	wg.Wait()
+
+	time := time.Now()
+	filename := "../img/imagen1_face" + time.String() + ".jpg"
+	f, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE, 0600)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer f.Close()
+	var opt jpeg.Options
+	opt.Quality = 80
+	jpeg.Encode(f, cubeImage, &opt)
 
 }
 
 //process a face an generate an image
-func processFace(equiImage image.Image, face string, faceOffset lib.VectorArray3, name string, cubemap lib.Cubemap) {
+func processFace(equiImage image.Image, cubeImage image.NRGBA, face string, faceOffset lib.VectorArray3, name string, cubemap lib.Cubemap) {
 	var colour = cubemap.GetFaceColor(face)
 
 	var viewVector lib.Vector3
 	var latLong lib.LatLong
-	cubeImage := image.NewNRGBA(image.Rect(0, 0, tileSize, tileSize))
-	for fy := 0; fy < tileSize; fy++ {
-		for fx := 0; fx < tileSize; fx++ {
 
+	for fy := 0; fy < cubemap.TileSize.Y; fy++ {
+		for fx := 0; fx < cubemap.TileSize.X; fx++ {
 			var screenPos lib.LatLong
+			x := fx + (faceOffset.X * cubemap.TileSize.X)
+			y := fy + (faceOffset.Y * cubemap.TileSize.Y)
 
 			vx := float64(fx) / float64(cubemap.TileSize.X)
 			vy := float64(fy) / float64(cubemap.TileSize.Y)
@@ -95,21 +111,9 @@ func processFace(equiImage image.Image, face string, faceOffset lib.VectorArray3
 				colour = ReadPixelClamped(equiImage, screenPos.X, screenPos.Y, inWidth, inHeight)
 			}
 
-			cubeImage.Set(fx, fy, colour)
+			cubeImage.Set(x, y, colour)
 		}
 	}
-
-	time := time.Now()
-	filename := "../img/" + name + "_face" + time.String() + ".jpg"
-	f, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE, 0600)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	defer f.Close()
-	var opt jpeg.Options
-	opt.Quality = 80
-	jpeg.Encode(f, cubeImage, &opt)
 
 	defer wg.Done()
 
