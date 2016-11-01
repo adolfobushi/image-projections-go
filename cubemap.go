@@ -1,4 +1,4 @@
-package lib
+package equitocube
 
 import (
 	"errors"

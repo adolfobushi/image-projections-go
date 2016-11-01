@@ -19,22 +19,33 @@ import (
 	"encoding/base64"
 
 	"bytes"
+)
 
-	conf "github.com/adolfobushi/equirectangular-to-cubic/config"
-	"github.com/adolfobushi/equirectangular-to-cubic/lib"
+const (
+	//ImageFileFormatPng exported png format
+	ImageFileFormatPng string = ".png"
+
+	//ImageFileFormatJpg exported jpg format
+	ImageFileFormatJpg string = ".jpg"
+
+	//ImageDataFormatPath return the image path
+	ImageDataFormatPath string = "path"
+
+	//ImageDataFormatBase64 return the image as base64 string
+	ImageDataFormatBase64 string = "base64"
 )
 
 var (
-	inWidth         float64 //image with
-	inHeight        float64 //image height
-	outputWidth     int     //final image width (used only for cube calculations)
-	outputHeight    int     //final image height (used only for cube calculations)
-	tileSize        = 2048  //size of exported images
-	wg              sync.WaitGroup
-	images          map[string]string
-	tmpDir          = "/tmp"
-	imageFileFormat = conf.ImageFileFormatJpg
-	imageDataFormat = conf.ImageDataFormatPath
+	inWidth         float64               //image with
+	inHeight        float64               //image height
+	outputWidth     int                   //final image width (used only for cube calculations)
+	outputHeight    int                   //final image height (used only for cube calculations)
+	tileSize        = 2048                //size of exported images
+	wg              sync.WaitGroup        //wait for conversion end
+	images          map[string]string     //the 6 cube images in the imageDataFormat selected
+	tmpDir          = "/tmp"              //temporal image directory
+	imageFileFormat = ImageFileFormatJpg  //the exported image format (jpg, png)
+	imageDataFormat = ImageDataFormatPath //the exported image data (path, base64)
 )
 
 /*
@@ -42,21 +53,21 @@ func main() {
 
 	inputFilename := "/home/adolfo/Descargas/prueba_cubo/imagen5.jpg"
 
-	imageDataFormat = conf.ImageDataFormatBase64
-	imageFileFormat = conf.ImageFormatPng
+	imageDataFormat = ImageDataFormatBase64
+	imageFileFormat = ImageFormatPng
 
 	im := GetCubicImage("../img", "imagenprueba", inputFilename, 4096)
 	fmt.Println(im["U"])
 }*/
 
 //Configuration set the init configuration of module
-func Configuration(conf conf.Configuration) {
-	if conf.ImageDataFormat != "" {
-		imageDataFormat = conf.ImageDataFormat
+func Configuration(conf Config) {
+	if ImageDataFormatPath != "" {
+		imageDataFormat = ImageDataFormatPath
 	}
 
 	if conf.ImageFileFormat != "" {
-		imageFileFormat = conf.ImageFileFormat
+		imageFileFormat = conf.ImageDataFormat
 	}
 
 	if conf.TempDir != "" {
@@ -75,7 +86,7 @@ func GetCubicImage(fileName, imageData string) map[string]string {
 	outputWidth = tileSize * 2
 	outputHeight = tileSize * 3
 
-	cubemap, err := lib.NewCubemap()
+	cubemap, err := NewCubemap()
 	if err != nil {
 		fmt.Println("cubemap: ", err.Error())
 	}
@@ -103,7 +114,7 @@ func GetCubicImage(fileName, imageData string) map[string]string {
 }
 
 //EquirectToCubemap convert an image equirectangular to cubic
-func equirectToCubemap(equiImage image.Image, cubemap lib.Cubemap, filename string) map[string]string {
+func equirectToCubemap(equiImage image.Image, cubemap Cubemap, filename string) map[string]string {
 
 	for face, faceOffset := range cubemap.FaceMap {
 		wg.Add(1)
@@ -117,17 +128,17 @@ func equirectToCubemap(equiImage image.Image, cubemap lib.Cubemap, filename stri
 }
 
 //process a face an generate an image
-func processCubeFace(equiImage image.Image, face string, faceOffset lib.VectorArray3, name string, cubemap lib.Cubemap) string {
+func processCubeFace(equiImage image.Image, face string, faceOffset VectorArray3, name string, cubemap Cubemap) string {
 	var colour = cubemap.GetFaceColor(face)
 
-	var viewVector lib.Vector3
-	var latLong lib.LatLong
+	var viewVector Vector3
+	var latLong LatLong
 
 	faceImg := image.NewRGBA(image.Rect(0, 0, tileSize, tileSize))
 
 	for fy := 0; fy < tileSize; fy++ {
 		for fx := 0; fx < tileSize; fx++ {
-			var screenPos lib.LatLong
+			var screenPos LatLong
 
 			if fx >= faceOffset.X && fy >= faceOffset.Y {
 				vx := float64(fx) / float64(cubemap.TileSize.X)
@@ -136,11 +147,11 @@ func processCubeFace(equiImage image.Image, face string, faceOffset lib.VectorAr
 
 				if viewVector.X != 0 {
 
-					latLong = lib.ViewToLatLon(viewVector)
+					latLong = ViewToLatLon(viewVector)
 
-					screenPos = lib.GetScreenFromLatLong(latLong.X, latLong.Y, inWidth, inHeight)
+					screenPos = GetScreenFromLatLong(latLong.X, latLong.Y, inWidth, inHeight)
 
-					colour = ReadPixelClamped(equiImage, screenPos.X, screenPos.Y, inWidth, inHeight)
+					colour = readPixelClamped(equiImage, screenPos.X, screenPos.Y, inWidth, inHeight)
 				}
 				faceImg.Set(fx, fy, colour)
 			}
@@ -150,11 +161,11 @@ func processCubeFace(equiImage image.Image, face string, faceOffset lib.VectorAr
 
 	time := time.Now()
 	filename := ""
-	if imageDataFormat == conf.ImageDataFormatBase64 {
+	if imageDataFormat == ImageDataFormatBase64 {
 
 		buf := new(bytes.Buffer)
 
-		if imageFileFormat == conf.ImageFileFormatJpg {
+		if imageFileFormat == ImageFileFormatJpg {
 			var opt jpeg.Options
 			opt.Quality = 80
 
@@ -177,16 +188,16 @@ func processCubeFace(equiImage image.Image, face string, faceOffset lib.VectorAr
 		f, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE, 0600)
 		if err != nil {
 			fmt.Println(err)
-			return "error"
+			return "error on create file"
 		}
 		defer f.Close()
 
-		if imageFileFormat == conf.ImageFileFormatJpg {
+		if imageFileFormat == ImageFileFormatJpg {
 			var opt jpeg.Options
 			opt.Quality = 80
 			jpeg.Encode(f, faceImg, &opt)
 
-		} else if imageFileFormat == conf.ImageFileFormatPng {
+		} else if imageFileFormat == ImageFileFormatPng {
 			png.Encode(f, faceImg)
 		} else {
 			return "not supported extension"
@@ -200,7 +211,7 @@ func processCubeFace(equiImage image.Image, face string, faceOffset lib.VectorAr
 }
 
 //ReadPixelClamped get the pixel color of equirectangular image to put in cube face
-func ReadPixelClamped(img image.Image, x float64, y float64, w float64, h float64) color.RGBA64 {
+func readPixelClamped(img image.Image, x float64, y float64, w float64, h float64) color.RGBA64 {
 	colour := color.RGBA64{255, 255, 255, 255}
 
 	lat := int(math.Max(0, math.Min(x, w-1)))
