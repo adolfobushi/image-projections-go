@@ -1,5 +1,7 @@
 package equitocube
 
+//package main
+
 import (
 	"fmt"
 	"image"
@@ -12,32 +14,64 @@ import (
 	"image/color"
 	"image/jpeg"
 
+	"image/png"
+
+	"encoding/base64"
+
+	"bytes"
+
+	conf "github.com/adolfobushi/equirectangular-to-cubic/config"
 	"github.com/adolfobushi/equirectangular-to-cubic/lib"
 )
 
 var (
-	inWidth      float64 //image with
-	inHeight     float64 //image height
-	outputWidth  int     //final image width (used only for cube calculations)
-	outputHeight int     //final image height (used only for cube calculations)
-	tileSize     = 2048  //size of exported images
-	wg           sync.WaitGroup
-	images       map[string]string
+	inWidth         float64 //image with
+	inHeight        float64 //image height
+	outputWidth     int     //final image width (used only for cube calculations)
+	outputHeight    int     //final image height (used only for cube calculations)
+	tileSize        = 2048  //size of exported images
+	wg              sync.WaitGroup
+	images          map[string]string
+	tmpDir          = "/tmp"
+	imageFileFormat = conf.ImageFileFormatJpg
+	imageDataFormat = conf.ImageDataFormatPath
 )
 
 /*
 func main() {
 
-	inputFilename := "//home/adolfo/Descargas/prueba_cubo/imagen11.jpg"
+	inputFilename := "/home/adolfo/Descargas/prueba_cubo/imagen5.jpg"
 
-	GetCubicImage("/temp/", "imagenprueba", inputFilename, 4096)
+	imageDataFormat = conf.ImageDataFormatBase64
+	imageFileFormat = conf.ImageFormatPng
 
+	im := GetCubicImage("../img", "imagenprueba", inputFilename, 4096)
+	fmt.Println(im["U"])
 }*/
 
+//Configuration set the init configuration of module
+func Configuration(conf conf.Configuration) {
+	if conf.ImageDataFormat != "" {
+		imageDataFormat = conf.ImageDataFormat
+	}
+
+	if conf.ImageFileFormat != "" {
+		imageFileFormat = conf.ImageFileFormat
+	}
+
+	if conf.TempDir != "" {
+		tmpDir = conf.TempDir
+	}
+
+	if !math.IsNaN(float64(conf.TileSize)) {
+		tileSize = conf.TileSize
+	}
+}
+
 //GetCubicImage transform equirectangular image to cubic and return the 6 image paths
-func GetCubicImage(dir, name, imageData string, tilesize int) map[string]string {
+func GetCubicImage(fileName, imageData string) map[string]string {
 	images = make(map[string]string)
-	tileSize = tilesize
+
 	outputWidth = tileSize * 2
 	outputHeight = tileSize * 3
 
@@ -64,16 +98,16 @@ func GetCubicImage(dir, name, imageData string, tilesize int) map[string]string 
 
 	inWidth = float64(bo.Max.X)
 	inHeight = float64(bo.Max.Y)
-	ims := equirectToCubemap(im, *cubemap)
+	ims := equirectToCubemap(im, *cubemap, fileName)
 	return ims
 }
 
 //EquirectToCubemap convert an image equirectangular to cubic
-func equirectToCubemap(equiImage image.Image, cubemap lib.Cubemap) map[string]string {
+func equirectToCubemap(equiImage image.Image, cubemap lib.Cubemap, filename string) map[string]string {
 
 	for face, faceOffset := range cubemap.FaceMap {
 		wg.Add(1)
-		go processCubeFace(equiImage, face, faceOffset, "mar", cubemap)
+		go processCubeFace(equiImage, face, faceOffset, filename, cubemap)
 
 	}
 
@@ -102,7 +136,7 @@ func processCubeFace(equiImage image.Image, face string, faceOffset lib.VectorAr
 
 				if viewVector.X != 0 {
 
-					latLong = lib.ViewToLatLon(viewVector) //	 0.9s
+					latLong = lib.ViewToLatLon(viewVector)
 
 					screenPos = lib.GetScreenFromLatLong(latLong.X, latLong.Y, inWidth, inHeight)
 
@@ -115,16 +149,49 @@ func processCubeFace(equiImage image.Image, face string, faceOffset lib.VectorAr
 	}
 
 	time := time.Now()
-	filename := "../img/" + name + "_" + face + "_" + time.String() + ".jpg"
-	f, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE, 0600)
-	if err != nil {
-		fmt.Println(err)
-		return "error"
+	filename := ""
+	if imageDataFormat == conf.ImageDataFormatBase64 {
+
+		buf := new(bytes.Buffer)
+
+		if imageFileFormat == conf.ImageFileFormatJpg {
+			var opt jpeg.Options
+			opt.Quality = 80
+
+			err := jpeg.Encode(buf, faceImg, &opt)
+			if err != nil {
+				return "error converting to base64"
+			}
+		} else {
+			err := png.Encode(buf, faceImg)
+			if err != nil {
+				return "error converting to base64"
+			}
+		}
+
+		filename = base64.URLEncoding.EncodeToString([]byte(buf.Bytes()))
+
+	} else {
+
+		filename = tmpDir + "/" + name + "_" + face + "_" + time.String() + imageFileFormat
+		f, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE, 0600)
+		if err != nil {
+			fmt.Println(err)
+			return "error"
+		}
+		defer f.Close()
+
+		if imageFileFormat == conf.ImageFileFormatJpg {
+			var opt jpeg.Options
+			opt.Quality = 80
+			jpeg.Encode(f, faceImg, &opt)
+
+		} else if imageFileFormat == conf.ImageFileFormatPng {
+			png.Encode(f, faceImg)
+		} else {
+			return "not supported extension"
+		}
 	}
-	defer f.Close()
-	var opt jpeg.Options
-	opt.Quality = 80
-	jpeg.Encode(f, faceImg, &opt)
 
 	images[face] = filename
 
