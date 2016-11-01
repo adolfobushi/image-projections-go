@@ -4,15 +4,8 @@ import (
 	"errors"
 	"image/color"
 	"math"
-
-	"github.com/lucasb-eyer/go-colorful"
 )
 
-const (
-	pi = 3.14159265358979323846264338327950288
-)
-
-//23ULFRBD
 //Cubemap save cubemap data
 type Cubemap struct {
 	Ratio          Vector2
@@ -40,6 +33,7 @@ type Vector3 struct {
 	Z float64
 }
 
+//VectorArray3 is a Cuaternion Vector
 type VectorArray3 struct {
 	X int
 	Y int
@@ -48,31 +42,13 @@ type VectorArray3 struct {
 
 //DegreesToRadians convert degrees to radians
 func DegreesToRadians(deg float64) float64 {
-	return deg * pi / 180
+	return deg * math.Pi / 180
 }
 
 //RadiansToDegrees convert radian angles to degrees
 func RadiansToDegrees(rad float64) float64 {
-	return rad * 180.0 / pi
+	return rad * 180.0 / math.Pi
 }
-
-//	LatLonToView
-/*
-func VectorFromCoordsRad($latlon)
-{
-    //	http://en.wikipedia.org/wiki/N-vector#Converting_latitude.2Flongitude_to_n-vector
-    latitude := $latlon->x;
-    longitude = $latlon->y;
-    las = sin($latitude);
-    lac = cos($latitude);
-    los = sin($longitude);
-    loc = cos($longitude);
-
-    result = new Vector3( $los * $lac, $las, $loc * $lac );
-    //assert(fabsf(result.Length() - 1.0f) < 0.01f);
-
-    return $result;
-}*/
 
 //NewCubemap creates a new Cubemap
 func NewCubemap() (*Cubemap, error) {
@@ -224,6 +200,7 @@ func (c Cubemap) GetImageHeight() int {
 	return c.Ratio.Y * c.TileSize.Y
 }
 
+//getSquareTileSize get the quareTileSize
 func (c Cubemap) getSquareTileSize() int {
 	return c.SquareTileSize
 }
@@ -272,6 +249,7 @@ func (c Cubemap) ScreenToWorld(face string, screenPosX float64, screenPosY float
 	return vector
 }
 
+//GetFaceColor get a unique color for each face of cube
 func (c Cubemap) GetFaceColor(face string) color.RGBA64 {
 	p := color.RGBA64{
 		255, 255, 255, 255,
@@ -316,11 +294,7 @@ func (c Cubemap) GetFaceColor(face string) color.RGBA64 {
 	return p
 }
 
-func GetRgb(r, g, b float64) string {
-	c := colorful.Color{r, g, b}
-	return c.Hex()
-}
-
+//ViewToLatLon get the cartesian position of a math.Pixel in the cube face
 func ViewToLatLon(view3 Vector3) LatLong {
 	var latLong = LatLong{0, 0}
 
@@ -334,7 +308,6 @@ func ViewToLatLon(view3 Vector3) LatLong {
 	xz := math.Sqrt((x * x) + (z * z))
 	normy := y / math.Sqrt((y*y)+(xz*xz))
 	lon := math.Asin(normy)
-	//$lon = atan2( $y, $xz );
 
 	//	stretch longitude...
 	lon *= 2.0
@@ -344,11 +317,12 @@ func ViewToLatLon(view3 Vector3) LatLong {
 	return latLong
 }
 
+//GetScreenFromLatLong return the cartesian position of a math.Pixel in the original image
 func GetScreenFromLatLong(lat float64, lon float64, width float64, height float64) LatLong {
 	var screenPos = LatLong{0, 0}
-	//	-pi...pi -> -1...1
-	lat /= pi
-	lon /= pi
+	//	-math.Pi...math.Pi -> -1...1
+	lat /= math.Pi
+	lon /= math.Pi
 
 	//	-1..1 -> 0..2
 	lat += 1.0

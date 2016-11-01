@@ -1,4 +1,6 @@
-package main
+package equitocube
+
+//package main
 
 import (
 	"fmt"
@@ -6,37 +8,83 @@ import (
 	"log"
 	"math"
 	"os"
+	"sync"
 	"time"
 
 	"image/color"
 	"image/jpeg"
 
+	"image/png"
+
+	"encoding/base64"
+
+	"bytes"
+
+	conf "github.com/adolfobushi/equirectangular-to-cubic/config"
 	"github.com/adolfobushi/equirectangular-to-cubic/lib"
 )
 
+var (
+	inWidth         float64 //image with
+	inHeight        float64 //image height
+	outputWidth     int     //final image width (used only for cube calculations)
+	outputHeight    int     //final image height (used only for cube calculations)
+	tileSize        = 2048  //size of exported images
+	wg              sync.WaitGroup
+	images          map[string]string
+	tmpDir          = "/tmp"
+	imageFileFormat = conf.ImageFileFormatJpg
+	imageDataFormat = conf.ImageDataFormatPath
+)
+
+/*
 func main() {
-	inputFilename := "//home/adolfo/Descargas/prueba_cubo/site_uploadfilezilla.jpg"
-	/*inputLayout := "equirect"
-	sampleWidth := 5064
-	sampleHeight := 2532
-	sampleTime := 0
 
-	outputFilename := "/home/adolfo/Documentos/panopo/panopo/img/img3_ok.jpg"*/
+	inputFilename := "/home/adolfo/Descargas/prueba_cubo/imagen5.jpg"
 
-	outputWidth := 4096
-	outputHeight := 6144
+	imageDataFormat = conf.ImageDataFormatBase64
+	imageFileFormat = conf.ImageFormatPng
+
+	im := GetCubicImage("../img", "imagenprueba", inputFilename, 4096)
+	fmt.Println(im["U"])
+}*/
+
+//Configuration set the init configuration of module
+func Configuration(conf conf.Configuration) {
+	if conf.ImageDataFormat != "" {
+		imageDataFormat = conf.ImageDataFormat
+	}
+
+	if conf.ImageFileFormat != "" {
+		imageFileFormat = conf.ImageFileFormat
+	}
+
+	if conf.TempDir != "" {
+		tmpDir = conf.TempDir
+	}
+
+	if !math.IsNaN(float64(conf.TileSize)) {
+		tileSize = conf.TileSize
+	}
+}
+
+//GetCubicImage transform equirectangular image to cubic and return the 6 image paths
+func GetCubicImage(fileName, imageData string) map[string]string {
+	images = make(map[string]string)
+
+	outputWidth = tileSize * 2
+	outputHeight = tileSize * 3
 
 	cubemap, err := lib.NewCubemap()
 	if err != nil {
-		fmt.Printf("cubemap: ", err.Error())
-
+		fmt.Println("cubemap: ", err.Error())
 	}
 
 	w, h := cubemap.Resize(outputWidth, outputHeight)
 	cubemap.TileSize.X = w
 	cubemap.TileSize.Y = h
-	reader, err := os.Open(inputFilename)
-	//var im image
+	reader, err := os.Open(imageData)
+
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -46,109 +94,109 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	bo := im.Bounds()
 
-	equirectToCubemap(im, *cubemap)
-	//fmt.Printf("%+v", im.ColorModel)
-
-	//bounds := im.Bounds()
-
-	// Calculate a 16-bin histogram for m's red, green, blue and alpha components.
-	//
-	// An image's bounds do not necessarily start at (0, 0), so the two loops start
-	// at bounds.Min.Y and bounds.Min.X. Looping over Y first and X second is more
-	// likely to result in better memory access patterns than X first and Y second.
-	/*cubeImage := image.NewNRGBA(image.Rect(0, 0, 5064, 2532))
-
-	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
-		for x := bounds.Min.X; x < bounds.Max.X; x++ {
-			r, g, b, a := im.At(x, y).RGBA()
-
-			col := color.RGBA64{R: uint16(r), G: uint16(g), B: uint16(b), A: uint16(a)}
-
-			cubeImage.Set(x, y, col)
-
-		}
-	}
-	f, err := os.OpenFile("ssrgb.jpg", os.O_WRONLY|os.O_CREATE, 0600)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	defer f.Close()
-
-	var opt jpeg.Options
-	opt.Quality = 80
-	jpeg.Encode(f, cubeImage, &opt)
-	//png.Encode(f, cubeImage)*/
-
-	//fmt.Fprintln("image: %v", im.Bounds())
-	//	$start = microtime(true);
-}
-
-//GetCubicImage transform equirectangular image to cubic and return the 6 image paths
-func GetCubicImage() {
-
+	inWidth = float64(bo.Max.X)
+	inHeight = float64(bo.Max.Y)
+	ims := equirectToCubemap(im, *cubemap, fileName)
+	return ims
 }
 
 //EquirectToCubemap convert an image equirectangular to cubic
-func equirectToCubemap(equiImage image.Image, cubemap lib.Cubemap) {
+func equirectToCubemap(equiImage image.Image, cubemap lib.Cubemap, filename string) map[string]string {
 
-	var inWidth float64 = 5064
-	var inHeight float64 = 2532
-
-	outWidth := cubemap.GetImageWidth()
-	outHeight := cubemap.GetImageHeight()
-
-	cubeImage := image.NewNRGBA(image.Rect(0, 0, outWidth, outHeight))
-
-	//	re-using class objects saves cpu time in massive loops
-	var viewVector lib.Vector3 // := lib.VectorArray3{0, 0, lib.Vector2{0, 0}}
-	var latLong lib.LatLong    // := lib.Vector2{0, 0}
-	//var sphereImagePos lib.Vector2  //:= lib.Vector2{0, 0}
-
-	//	go through each tile, convert pixel to lat long, then read
 	for face, faceOffset := range cubemap.FaceMap {
+		wg.Add(1)
+		go processCubeFace(equiImage, face, faceOffset, filename, cubemap)
 
-		var colour = cubemap.GetFaceColor(face)
-		var x int
-		var y int
-		for fy := 0; fy < cubemap.TileSize.Y; fy++ {
-			for fx := 0; fx < cubemap.TileSize.X; fx++ {
-				var screenPos lib.LatLong
-				x = fx + (faceOffset.X * cubemap.TileSize.X)
-				y = fy + (faceOffset.Y * cubemap.TileSize.Y)
+	}
 
+	wg.Wait()
+
+	return images
+}
+
+//process a face an generate an image
+func processCubeFace(equiImage image.Image, face string, faceOffset lib.VectorArray3, name string, cubemap lib.Cubemap) string {
+	var colour = cubemap.GetFaceColor(face)
+
+	var viewVector lib.Vector3
+	var latLong lib.LatLong
+
+	faceImg := image.NewRGBA(image.Rect(0, 0, tileSize, tileSize))
+
+	for fy := 0; fy < tileSize; fy++ {
+		for fx := 0; fx < tileSize; fx++ {
+			var screenPos lib.LatLong
+
+			if fx >= faceOffset.X && fy >= faceOffset.Y {
 				vx := float64(fx) / float64(cubemap.TileSize.X)
 				vy := float64(fy) / float64(cubemap.TileSize.Y)
 				viewVector = cubemap.ScreenToWorld(face, vx, vy)
 
 				if viewVector.X != 0 {
 
-					latLong = lib.ViewToLatLon(viewVector) //	 0.9s
+					latLong = lib.ViewToLatLon(viewVector)
 
 					screenPos = lib.GetScreenFromLatLong(latLong.X, latLong.Y, inWidth, inHeight)
 
 					colour = ReadPixelClamped(equiImage, screenPos.X, screenPos.Y, inWidth, inHeight)
 				}
-
-				cubeImage.Set(x, y, colour)
+				faceImg.Set(fx, fy, colour)
 			}
+
 		}
 	}
 
 	time := time.Now()
-	filename := "../img/" + time.String() + ".jpg"
-	f, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE, 0600)
-	if err != nil {
-		fmt.Println(err)
-		return
+	filename := ""
+	if imageDataFormat == conf.ImageDataFormatBase64 {
+
+		buf := new(bytes.Buffer)
+
+		if imageFileFormat == conf.ImageFileFormatJpg {
+			var opt jpeg.Options
+			opt.Quality = 80
+
+			err := jpeg.Encode(buf, faceImg, &opt)
+			if err != nil {
+				return "error converting to base64"
+			}
+		} else {
+			err := png.Encode(buf, faceImg)
+			if err != nil {
+				return "error converting to base64"
+			}
+		}
+
+		filename = base64.URLEncoding.EncodeToString([]byte(buf.Bytes()))
+
+	} else {
+
+		filename = tmpDir + "/" + name + "_" + face + "_" + time.String() + imageFileFormat
+		f, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE, 0600)
+		if err != nil {
+			fmt.Println(err)
+			return "error"
+		}
+		defer f.Close()
+
+		if imageFileFormat == conf.ImageFileFormatJpg {
+			var opt jpeg.Options
+			opt.Quality = 80
+			jpeg.Encode(f, faceImg, &opt)
+
+		} else if imageFileFormat == conf.ImageFileFormatPng {
+			png.Encode(f, faceImg)
+		} else {
+			return "not supported extension"
+		}
 	}
-	defer f.Close()
-	var opt jpeg.Options
-	opt.Quality = 80
-	jpeg.Encode(f, cubeImage, &opt)
-	//png.Encode(f, cubeImage)
-	//equiImage = cubeImage
+
+	images[face] = filename
+
+	defer wg.Done()
+	return filename
 }
 
 //ReadPixelClamped get the pixel color of equirectangular image to put in cube face
