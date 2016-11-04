@@ -1,5 +1,7 @@
 package equitocube
 
+//package lib
+
 import (
 	"errors"
 	"image/color"
@@ -295,7 +297,7 @@ func (c Cubemap) GetFaceColor(face string) color.RGBA64 {
 }
 
 //ViewToLatLon get the cartesian position of a math.Pixel in the cube face
-func ViewToLatLon(view3 Vector3) LatLong {
+func viewToLatLon(view3 Vector3) LatLong {
 	var latLong = LatLong{0, 0}
 
 	x := float64(view3.X)
@@ -318,7 +320,7 @@ func ViewToLatLon(view3 Vector3) LatLong {
 }
 
 //GetScreenFromLatLong return the cartesian position of a math.Pixel in the original image
-func GetScreenFromLatLong(lat float64, lon float64, width float64, height float64) LatLong {
+func getScreenFromLatLong(lat float64, lon float64, width float64, height float64) LatLong {
 	var screenPos = LatLong{0, 0}
 	//	-math.Pi...math.Pi -> -1...1
 	lat /= math.Pi

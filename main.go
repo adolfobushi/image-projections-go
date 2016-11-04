@@ -5,9 +5,9 @@ package equitocube
 import (
 	"fmt"
 	"image"
-	"log"
 	"math"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -19,6 +19,7 @@ import (
 	"encoding/base64"
 
 	"bytes"
+	"errors"
 )
 
 const (
@@ -36,51 +37,73 @@ const (
 )
 
 var (
-	inWidth         float64               //image with
-	inHeight        float64               //image height
-	outputWidth     int                   //final image width (used only for cube calculations)
-	outputHeight    int                   //final image height (used only for cube calculations)
-	tileSize        = 2048                //size of exported images
-	wg              sync.WaitGroup        //wait for conversion end
-	images          map[string]string     //the 6 cube images in the imageDataFormat selected
-	tmpDir          = "/tmp"              //temporal image directory
-	imageFileFormat = ImageFileFormatJpg  //the exported image format (jpg, png)
-	imageDataFormat = ImageDataFormatPath //the exported image data (path, base64)
+	inWidth              float64               //image with
+	inHeight             float64               //image height
+	outputWidth          int                   //final image width (used only for cube calculations)
+	outputHeight         int                   //final image height (used only for cube calculations)
+	tileSize             = 2048                //size of exported images
+	wg                   sync.WaitGroup        //wait for conversion end
+	images               map[string]string     //the 6 cube images in the imageDataFormat selected
+	tmpDir               = "/tmp"              //temporal image directory
+	imageFileFormat      = ImageFileFormatJpg  //the exported image format (jpg, png)
+	imageDataFormat      = ImageDataFormatPath //the exported image data (path, base64)
+	inputImageDataFormat = ImageDataFormatPath //the input image data format (path, base64)
 )
 
 /*
 func main() {
 
-	inputFilename := "/home/adolfo/Descargas/prueba_cubo/imagen5.jpg"
+	inputFilename := "/home/adolfo/Descargas/prueba_cubo/imagen2.jpg"
 
-	imageDataFormat = ImageDataFormatBase64
-	imageFileFormat = ImageFormatPng
+	imageDataFormat = ImageDataFormatPath
+	imageFileFormat = ImageFileFormatPng
+	config := lib.Config{ImageDataFormat: ImageDataFormatPath, TileSize: 512}
+	Configuration(config)
 
-	im := GetCubicImage("../img", "imagenprueba", inputFilename, 4096)
+	//im := GetCubicImage("../img", "imagenprueba", inputFilename, 4096)
+	im := GetCubicImage("imagentest", inputFilename)
 	fmt.Println(im["U"])
 }*/
 
 //Configuration set the init configuration of module
 func Configuration(conf Config) {
-	if ImageDataFormatPath != "" {
-		imageDataFormat = ImageDataFormatPath
+
+	if conf.InputImageDataFormat != "" {
+		inputImageDataFormat = conf.InputImageDataFormat
+	}
+
+	if conf.ImageDataFormat != "" {
+		imageDataFormat = conf.ImageDataFormat
 	}
 
 	if conf.ImageFileFormat != "" {
-		imageFileFormat = conf.ImageDataFormat
+		imageFileFormat = conf.ImageFileFormat
 	}
 
 	if conf.TempDir != "" {
 		tmpDir = conf.TempDir
 	}
 
-	if !math.IsNaN(float64(conf.TileSize)) {
+	if isPowerOfTwo(conf.TileSize) {
 		tileSize = conf.TileSize
 	}
+
+}
+
+//isPowerOfTwo calculate if the size passed is power of two
+func isPowerOfTwo(x int) bool {
+
+	y, yy := math.Frexp(float64(x))
+
+	if y != 0.5 && yy != 0 {
+		return false
+	}
+	return true
 }
 
 //GetCubicImage transform equirectangular image to cubic and return the 6 image paths
 func GetCubicImage(fileName, imageData string) map[string]string {
+
 	images = make(map[string]string)
 
 	outputWidth = tileSize * 2
@@ -94,23 +117,61 @@ func GetCubicImage(fileName, imageData string) map[string]string {
 	w, h := cubemap.Resize(outputWidth, outputHeight)
 	cubemap.TileSize.X = w
 	cubemap.TileSize.Y = h
-	reader, err := os.Open(imageData)
+	var im image.Image
+	if inputImageDataFormat == ImageDataFormatPath {
 
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer reader.Close()
+		imFile, err := readImageFromFile(imageData)
+		if err != nil {
+			fmt.Println(err.Error())
 
-	im, _, err := image.Decode(reader)
-	if err != nil {
-		log.Fatal(err)
+		}
+		im = imFile
+
+	} else {
+		imb64, err := readBase64(imageData)
+		if err != nil {
+			fmt.Println(err.Error())
+		}
+		im = imb64
 	}
+
 	bo := im.Bounds()
 
 	inWidth = float64(bo.Max.X)
 	inHeight = float64(bo.Max.Y)
 	ims := equirectToCubemap(im, *cubemap, fileName)
 	return ims
+
+}
+
+func readBase64(file string) (image.Image, error) {
+	readerBase64 := base64.NewDecoder(base64.StdEncoding, strings.NewReader(file))
+
+	img, _, err := image.Decode(readerBase64)
+	if err != nil {
+		fmt.Println("IMAGE ERROR: ", err)
+		return img, errors.New("base64: " + err.Error())
+	}
+
+	return img, nil
+
+}
+
+func readImageFromFile(file string) (image.Image, error) {
+	var imag image.Image
+	reader, err := os.Open(file)
+
+	if err != nil {
+		return imag, errors.New("reader: " + err.Error())
+	}
+	defer reader.Close()
+
+	img, _, err := image.Decode(reader)
+	if err != nil {
+		return imag, errors.New("image: " + err.Error())
+	}
+
+	return img, nil
 }
 
 //EquirectToCubemap convert an image equirectangular to cubic
@@ -147,9 +208,9 @@ func processCubeFace(equiImage image.Image, face string, faceOffset VectorArray3
 
 				if viewVector.X != 0 {
 
-					latLong = ViewToLatLon(viewVector)
+					latLong = viewToLatLon(viewVector)
 
-					screenPos = GetScreenFromLatLong(latLong.X, latLong.Y, inWidth, inHeight)
+					screenPos = getScreenFromLatLong(latLong.X, latLong.Y, inWidth, inHeight)
 
 					colour = readPixelClamped(equiImage, screenPos.X, screenPos.Y, inWidth, inHeight)
 				}
@@ -162,7 +223,7 @@ func processCubeFace(equiImage image.Image, face string, faceOffset VectorArray3
 	time := time.Now()
 	filename := ""
 	if imageDataFormat == ImageDataFormatBase64 {
-
+		fmt.Println("export in base64")
 		buf := new(bytes.Buffer)
 
 		if imageFileFormat == ImageFileFormatJpg {
@@ -183,7 +244,7 @@ func processCubeFace(equiImage image.Image, face string, faceOffset VectorArray3
 		filename = base64.URLEncoding.EncodeToString([]byte(buf.Bytes()))
 
 	} else {
-
+		fmt.Println("export in file")
 		filename = tmpDir + "/" + name + "_" + face + "_" + time.String() + imageFileFormat
 		f, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE, 0600)
 		if err != nil {
