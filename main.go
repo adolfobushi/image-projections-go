@@ -1,7 +1,6 @@
-package equitocube
+package main
 
-//package main
-
+//package equitocube
 import (
 	"fmt"
 	"image"
@@ -44,26 +43,25 @@ var (
 	tileSize             = 2048                //size of exported images
 	wg                   sync.WaitGroup        //wait for conversion end
 	images               map[string]string     //the 6 cube images in the imageDataFormat selected
-	tmpDir               = "/tmp"              //temporal image directory
+	tmpDir               = "../img"            //temporal image directory
 	imageFileFormat      = ImageFileFormatJpg  //the exported image format (jpg, png)
 	imageDataFormat      = ImageDataFormatPath //the exported image data (path, base64)
 	inputImageDataFormat = ImageDataFormatPath //the input image data format (path, base64)
 )
 
-/*
 func main() {
 
-	inputFilename := "/home/adolfo/Descargas/prueba_cubo/imagen2.jpg"
+	inputFilename := "/home/adolfo/Descargas/prueba_cubo/ambient_cube02.jpg"
 
 	imageDataFormat = ImageDataFormatPath
 	imageFileFormat = ImageFileFormatPng
-	config := lib.Config{ImageDataFormat: ImageDataFormatPath, TileSize: 512}
+	config := Config{ImageDataFormat: ImageDataFormatPath, TileSize: 2048}
 	Configuration(config)
 
 	//im := GetCubicImage("../img", "imagenprueba", inputFilename, 4096)
 	im := GetCubicImage("imagentest", inputFilename)
 	fmt.Println(im["U"])
-}*/
+}
 
 //Configuration set the init configuration of module
 func Configuration(conf Config) {
@@ -178,8 +176,11 @@ func readImageFromFile(file string) (image.Image, error) {
 func equirectToCubemap(equiImage image.Image, cubemap Cubemap, filename string) map[string]string {
 
 	for face, faceOffset := range cubemap.FaceMap {
+
+		//if face == "L" {
 		wg.Add(1)
 		go processCubeFace(equiImage, face, faceOffset, filename, cubemap)
+		//}
 
 	}
 
@@ -194,6 +195,7 @@ func processCubeFace(equiImage image.Image, face string, faceOffset VectorArray3
 
 	var viewVector Vector3
 	var latLong LatLong
+	var err error
 
 	faceImg := image.NewRGBA(image.Rect(0, 0, tileSize, tileSize))
 
@@ -201,21 +203,24 @@ func processCubeFace(equiImage image.Image, face string, faceOffset VectorArray3
 		for fx := 0; fx < tileSize; fx++ {
 			var screenPos LatLong
 
-			if fx >= faceOffset.X && fy >= faceOffset.Y {
-				vx := float64(fx) / float64(cubemap.TileSize.X)
-				vy := float64(fy) / float64(cubemap.TileSize.Y)
-				viewVector = cubemap.ScreenToWorld(face, vx, vy)
-
-				if viewVector.X != 0 {
-
-					latLong = viewToLatLon(viewVector)
-
-					screenPos = getScreenFromLatLong(latLong.X, latLong.Y, inWidth, inHeight)
-
-					colour = readPixelClamped(equiImage, screenPos.X, screenPos.Y, inWidth, inHeight)
-				}
-				faceImg.Set(fx, fy, colour)
+			//if fx >= faceOffset.X && fy >= faceOffset.Y {
+			vx := float64(fx) / float64(cubemap.TileSize.X)
+			vy := float64(fy) / float64(cubemap.TileSize.Y)
+			viewVector, err = cubemap.ScreenToWorld(face, vx, vy)
+			if err != nil {
+				fmt.Printf("error")
 			}
+			//if fx < 10 && fy < 25 {
+
+			latLong = viewToLatLon(viewVector)
+
+			screenPos = getScreenFromLatLong(latLong.X, latLong.Y, inWidth, inHeight)
+
+			//}
+			colour = readPixelClamped(equiImage, screenPos.X, screenPos.Y, inWidth, inHeight)
+			faceImg.Set(fx, fy, colour)
+
+			//}
 
 		}
 	}
@@ -275,8 +280,8 @@ func processCubeFace(equiImage image.Image, face string, faceOffset VectorArray3
 func readPixelClamped(img image.Image, x float64, y float64, w float64, h float64) color.RGBA64 {
 	colour := color.RGBA64{255, 255, 255, 255}
 
-	lat := int(math.Max(0, math.Min(x, w-1)))
-	long := int(math.Max(0, math.Min(y, h-1)))
+	lat := int(math.Max(0, math.Min(x, w)))
+	long := int(math.Max(0, math.Min(y, h)))
 	r, g, b, a := img.At(lat, long).RGBA()
 
 	colour.R = uint16(r)

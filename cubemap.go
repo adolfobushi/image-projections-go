@@ -1,6 +1,6 @@
-package equitocube
+package main
 
-//package lib
+//package equitocube
 
 import (
 	"errors"
@@ -208,7 +208,7 @@ func (c Cubemap) getSquareTileSize() int {
 }
 
 //ScreenToWorld get the screen position
-func (c Cubemap) ScreenToWorld(face string, screenPosX float64, screenPosY float64) Vector3 {
+func (c Cubemap) ScreenToWorld(face string, screenPosX float64, screenPosY float64) (Vector3, error) {
 	//	0..1 -> -1..1
 	screenPosX *= 2.0
 	screenPosY *= 2.0
@@ -220,35 +220,36 @@ func (c Cubemap) ScreenToWorld(face string, screenPosX float64, screenPosY float
 		vector.X = -1
 		vector.Y = -screenPosY
 		vector.Z = screenPosX
-		break
+		return vector, nil
+
 	case "R":
 		vector.X = 1
 		vector.Y = -screenPosY
 		vector.Z = -screenPosX
-		break
+		return vector, nil
 	case "U":
 		vector.X = -screenPosX
 		vector.Y = 1
 		vector.Z = -screenPosY
-		break
+		return vector, nil
 	case "D":
 		vector.X = -screenPosX
 		vector.Y = -1
 		vector.Z = screenPosY
-		break
+		return vector, nil
 	case "F":
 		vector.X = screenPosX
 		vector.Y = -screenPosY
 		vector.Z = 1
-		break
+		return vector, nil
 	case "B":
 		vector.X = -screenPosX
 		vector.Y = -screenPosY
 		vector.Z = -1
-		break
+		return vector, nil
 	}
 
-	return vector
+	return vector, errors.New("vector: not exist")
 }
 
 //GetFaceColor get a unique color for each face of cube
