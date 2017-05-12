@@ -1,6 +1,7 @@
-package main
+//package main
 
-//package equitocube
+package equitocube
+
 import (
 	"fmt"
 	"image"
@@ -43,12 +44,13 @@ var (
 	tileSize             = 2048                //size of exported images
 	wg                   sync.WaitGroup        //wait for conversion end
 	images               map[string]string     //the 6 cube images in the imageDataFormat selected
-	tmpDir               = "../img"            //temporal image directory
+	tmpDir               = os.TempDir()        //temporal image directory
 	imageFileFormat      = ImageFileFormatJpg  //the exported image format (jpg, png)
 	imageDataFormat      = ImageDataFormatPath //the exported image data (path, base64)
 	inputImageDataFormat = ImageDataFormatPath //the input image data format (path, base64)
 )
 
+/*
 func main() {
 
 	inputFilename := "/home/adolfo/Descargas/prueba_cubo/ambient_cube02.jpg"
@@ -61,7 +63,7 @@ func main() {
 	//im := GetCubicImage("../img", "imagenprueba", inputFilename, 4096)
 	im := GetCubicImage("imagentest", inputFilename)
 	fmt.Println(im["U"])
-}
+}*/
 
 //Configuration set the init configuration of module
 func Configuration(conf Config) {
@@ -142,6 +144,7 @@ func GetCubicImage(fileName, imageData string) map[string]string {
 
 }
 
+//readBase64 load image from base64 file
 func readBase64(file string) (image.Image, error) {
 	readerBase64 := base64.NewDecoder(base64.StdEncoding, strings.NewReader(file))
 
@@ -155,6 +158,7 @@ func readBase64(file string) (image.Image, error) {
 
 }
 
+//readImageFromFile load image from file in disk
 func readImageFromFile(file string) (image.Image, error) {
 	var imag image.Image
 	reader, err := os.Open(file)
@@ -177,10 +181,8 @@ func equirectToCubemap(equiImage image.Image, cubemap Cubemap, filename string) 
 
 	for face, faceOffset := range cubemap.FaceMap {
 
-		//if face == "L" {
 		wg.Add(1)
 		go processCubeFace(equiImage, face, faceOffset, filename, cubemap)
-		//}
 
 	}
 
@@ -203,24 +205,19 @@ func processCubeFace(equiImage image.Image, face string, faceOffset VectorArray3
 		for fx := 0; fx < tileSize; fx++ {
 			var screenPos LatLong
 
-			//if fx >= faceOffset.X && fy >= faceOffset.Y {
 			vx := float64(fx) / float64(cubemap.TileSize.X)
 			vy := float64(fy) / float64(cubemap.TileSize.Y)
 			viewVector, err = cubemap.ScreenToWorld(face, vx, vy)
 			if err != nil {
 				fmt.Printf("error")
 			}
-			//if fx < 10 && fy < 25 {
 
 			latLong = viewToLatLon(viewVector)
 
 			screenPos = getScreenFromLatLong(latLong.X, latLong.Y, inWidth, inHeight)
 
-			//}
 			colour = readPixelClamped(equiImage, screenPos.X, screenPos.Y, inWidth, inHeight)
 			faceImg.Set(fx, fy, colour)
-
-			//}
 
 		}
 	}

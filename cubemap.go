@@ -1,6 +1,6 @@
-package main
+//package main
 
-//package equitocube
+package equitocube
 
 import (
 	"errors"

@@ -1,6 +1,6 @@
-package main
+//package main
 
-//package equitocube
+package equitocube
 //Config save the initial module data
 type Config struct {
 	ImageFileFormat      string `json:"imageFileFormat"`      //values jpg, png
