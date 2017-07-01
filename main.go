@@ -37,33 +37,33 @@ const (
 )
 
 var (
-	inWidth              float64               //image with
-	inHeight             float64               //image height
-	outputWidth          int                   //final image width (used only for cube calculations)
-	outputHeight         int                   //final image height (used only for cube calculations)
-	tileSize             = 2048                //size of exported images
-	wg                   sync.WaitGroup        //wait for conversion end
-	images               map[string]string     //the 6 cube images in the imageDataFormat selected
-	tmpDir               = os.TempDir()        //temporal image directory
-	imageFileFormat      = ImageFileFormatJpg  //the exported image format (jpg, png)
+	inWidth              float64              //image with
+	inHeight             float64              //image height
+	outputWidth          int                  //final image width (used only for cube calculations)
+	outputHeight         int                  //final image height (used only for cube calculations)
+	tileSize             = 2048               //size of exported images
+	wg                   sync.WaitGroup       //wait for conversion end
+	images               map[string]string    //the 6 cube images in the imageDataFormat selected
+	tmpDir               = os.TempDir()       //temporal image directory
+	imageFileFormat      = ImageFileFormatJpg //the exported image format (jpg, png)
+	imageCompresion      = 60
 	imageDataFormat      = ImageDataFormatPath //the exported image data (path, base64)
 	inputImageDataFormat = ImageDataFormatPath //the input image data format (path, base64)
 )
 
-/*
 func main() {
 
 	inputFilename := "/home/adolfo/Descargas/prueba_cubo/ambient_cube02.jpg"
 
 	imageDataFormat = ImageDataFormatPath
 	imageFileFormat = ImageFileFormatPng
-	config := Config{ImageDataFormat: ImageDataFormatPath, TileSize: 2048}
+	config := Config{ImageDataFormat: ImageDataFormatPath, TileSize: 512, ImageCompresion: 90, ImageFileFormat: ImageFileFormatJpg}
 	Configuration(config)
 
 	//im := GetCubicImage("../img", "imagenprueba", inputFilename, 4096)
 	im := GetCubicImage("imagentest", inputFilename)
 	fmt.Println(im["U"])
-}*/
+}
 
 //Configuration set the init configuration of module
 func Configuration(conf Config) {
@@ -83,7 +83,9 @@ func Configuration(conf Config) {
 	if conf.TempDir != "" {
 		tmpDir = conf.TempDir
 	}
-
+	if conf.ImageCompresion > 0 {
+		imageCompresion = conf.ImageCompresion
+	}
 	if isPowerOfTwo(conf.TileSize) {
 		tileSize = conf.TileSize
 	}
@@ -230,7 +232,7 @@ func processCubeFace(equiImage image.Image, face string, faceOffset VectorArray3
 
 		if imageFileFormat == ImageFileFormatJpg {
 			var opt jpeg.Options
-			opt.Quality = 80
+			opt.Quality = imageCompresion
 
 			err := jpeg.Encode(buf, faceImg, &opt)
 			if err != nil {
@@ -257,7 +259,7 @@ func processCubeFace(equiImage image.Image, face string, faceOffset VectorArray3
 
 		if imageFileFormat == ImageFileFormatJpg {
 			var opt jpeg.Options
-			opt.Quality = 80
+			opt.Quality = imageCompresion
 			jpeg.Encode(f, faceImg, &opt)
 
 		} else if imageFileFormat == ImageFileFormatPng {

@@ -23,6 +23,7 @@ type Vector2 struct {
 	Y int
 }
 
+//LatLong is a cartesian coordinates
 type LatLong struct {
 	X float64
 	Y float64
